@@ -1,45 +1,9 @@
-type ElementType = string | number | object;
-
-interface NodeOperations<T> {
-  moveElement(array: T[], fromIndex: number, toIndex: number): T[];
-  addElement(array: T[], element: T, index: number): T[];
-  removeElement(array: T[], index: number): T[];
-  findElementIndex(array: T[], element: T): number;
-}
-
-const NodeOps: NodeOperations<ElementType> = {
-  moveElement(array, fromIndex, toIndex) {
-    const result = [...array];
-    const [element] = result.splice(fromIndex, 1);
-    result.splice(toIndex, 0, element);
-    console.log(`将 ${element} 移动到 ${array[toIndex - 1]} 后`);
-    return result;
-  },
-
-  addElement(array, element, index) {
-    const result = [...array];
-    result.splice(index, 0, element);
-    if (index === 0) console.log(`将 ${element} 添加到最前边`);
-    else console.log(`将 ${element} 添加到 ${array[index - 1]} 后`);
-    return result;
-  },
-
-  removeElement(array, index) {
-    const result = [...array];
-    result.splice(index, 1);
-    console.log(`删除 ${array[index]}`);
-    return result;
-  },
-
-  findElementIndex(array, element) {
-    return array.findIndex((item) => item === element);
-  },
-};
+import { type NodeOperations, type ElementType, nodeOps } from "./nodeOps";
 
 function diff<T extends ElementType>(
   oldNodes: T[],
   newNodes: T[],
-  ops: NodeOperations<T> = NodeOps as NodeOperations<T>,
+  ops: NodeOperations<T> = nodeOps as NodeOperations<T>,
 ): T[][] {
   const { moveElement, addElement, removeElement, findElementIndex } = ops;
   const states: T[][] = [oldNodes.slice()];
@@ -57,7 +21,6 @@ function diff<T extends ElementType>(
       if (oldNodeIndex >= lastFoundIndex) {
         // Node is already in correct position or later
         lastFoundIndex = oldNodeIndex;
-        states.push(currentState.slice());
       } else if (index > 0) {
         // Node needs to be moved after previous node
         const prevNode = newNodes[index - 1];
@@ -102,4 +65,4 @@ function diff<T extends ElementType>(
   return states;
 }
 
-export { diff, NodeOps, type ElementType, type NodeOperations };
+export { diff };
