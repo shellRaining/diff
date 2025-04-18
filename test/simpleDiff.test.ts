@@ -1,12 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { diff } from "../src/simpleDiff";
+import { describe, it, expect, } from "vitest";
+import { simpleDiff } from "../src/simpleDiff";
 import type { ElementType, NodeOperations } from "../src/nodeOps";
 import { nodeOps } from "../src/nodeOps";
-
-// Mock console.log to avoid output during tests
-beforeEach(() => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-});
 
 // Create custom mock nodeOps for testing
 function createMocknodeOps<T extends ElementType>(): NodeOperations<T> & {
@@ -82,7 +77,7 @@ describe("diff", () => {
       const newNodes = [1, 2, 3, 4];
       const mockOps = createMocknodeOps<number>();
 
-      const states = diff(oldNodes, newNodes, mockOps);
+      const states = simpleDiff(oldNodes, newNodes, mockOps);
 
       expect(states).toHaveLength(1);
       expect(states[0]).toEqual(oldNodes);
@@ -94,7 +89,7 @@ describe("diff", () => {
       const newNodes = [1, 2, 3, 4];
       const mockOps = createMocknodeOps<number>();
 
-      const states = diff(oldNodes, newNodes, mockOps);
+      const states = simpleDiff(oldNodes, newNodes, mockOps);
 
       expect(states.length).toBeGreaterThan(1);
       expect(states[states.length - 1]).toEqual(newNodes);
@@ -106,7 +101,7 @@ describe("diff", () => {
       const newNodes = [1, 2, 3, 4];
       const mockOps = createMocknodeOps<number>();
 
-      const states = diff(oldNodes, newNodes, mockOps);
+      const states = simpleDiff(oldNodes, newNodes, mockOps);
 
       expect(states.length).toBeGreaterThan(1);
       expect(states[states.length - 1]).toEqual(newNodes);
@@ -118,7 +113,7 @@ describe("diff", () => {
       const newNodes = [1, 2, 3, 4];
       const mockOps = createMocknodeOps<number>();
 
-      const states = diff(oldNodes, newNodes, mockOps);
+      const states = simpleDiff(oldNodes, newNodes, mockOps);
 
       expect(states.length).toBeGreaterThan(1);
       expect(states[states.length - 1]).toEqual(newNodes);
@@ -130,7 +125,7 @@ describe("diff", () => {
       const newNodes = [1, 2, 4];
       const mockOps = createMocknodeOps<number>();
 
-      const states = diff(oldNodes, newNodes, mockOps);
+      const states = simpleDiff(oldNodes, newNodes, mockOps);
 
       expect(states.length).toBeGreaterThan(1);
       expect(states[states.length - 1]).toEqual(newNodes);
@@ -142,7 +137,7 @@ describe("diff", () => {
       const newNodes = [1, 3, 2, 4];
       const mockOps = createMocknodeOps<number>();
 
-      const states = diff(oldNodes, newNodes, mockOps);
+      const states = simpleDiff(oldNodes, newNodes, mockOps);
 
       expect(states.length).toBeGreaterThan(1);
       expect(states[states.length - 1]).toEqual(newNodes);
@@ -157,7 +152,7 @@ describe("diff", () => {
       const newNodes = [6, 2, 7, 5, 3];
       const mockOps = createMocknodeOps<number>();
 
-      const states = diff(oldNodes, newNodes, mockOps);
+      const states = simpleDiff(oldNodes, newNodes, mockOps);
 
       expect(states.length).toBeGreaterThan(1);
       expect(states[states.length - 1]).toEqual(newNodes);
@@ -179,7 +174,7 @@ describe("diff", () => {
       const newNodes = ["d", "a", "c", "e"];
       const mockOps = createMocknodeOps<string>();
 
-      const states = diff(oldNodes, newNodes, mockOps);
+      const states = simpleDiff(oldNodes, newNodes, mockOps);
 
       expect(states.length).toBeGreaterThan(1);
       expect(states[states.length - 1]).toEqual(newNodes);
@@ -198,7 +193,7 @@ describe("diff", () => {
       const newNodes = [1, 2, 3];
       const mockOps = createMocknodeOps<number>();
 
-      const states = diff(oldNodes, newNodes, mockOps);
+      const states = simpleDiff(oldNodes, newNodes, mockOps);
 
       expect(states.length).toBeGreaterThan(1);
       expect(states[states.length - 1]).toEqual(newNodes);
@@ -210,7 +205,7 @@ describe("diff", () => {
       const newNodes: number[] = [];
       const mockOps = createMocknodeOps<number>();
 
-      const states = diff(oldNodes, newNodes, mockOps);
+      const states = simpleDiff(oldNodes, newNodes, mockOps);
 
       expect(states.length).toBeGreaterThan(1);
       expect(states[states.length - 1]).toEqual(newNodes);
@@ -222,7 +217,7 @@ describe("diff", () => {
       const newNodes = [4, 5, 6];
       const mockOps = createMocknodeOps<number>();
 
-      const states = diff(oldNodes, newNodes, mockOps);
+      const states = simpleDiff(oldNodes, newNodes, mockOps);
 
       expect(states.length).toBeGreaterThan(1);
       expect(states[states.length - 1]).toEqual(newNodes);

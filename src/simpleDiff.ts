@@ -1,6 +1,6 @@
 import { type NodeOperations, type ElementType, nodeOps } from "./nodeOps";
 
-function diff<T extends ElementType>(
+function simpleDiff<T extends ElementType>(
   oldNodes: T[],
   newNodes: T[],
   ops: NodeOperations<T> = nodeOps as NodeOperations<T>,
@@ -65,4 +65,4 @@ function diff<T extends ElementType>(
   return states;
 }
 
-export { diff };
+export { simpleDiff };
