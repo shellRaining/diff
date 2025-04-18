@@ -1,46 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { doubleDiff } from "../src/doubleDiff";
-import type { ElementType, NodeOperations } from "../src/nodeOps";
+import { createMockNodeOps, operationUtils } from "./utils/testUtils";
 
-// Create custom mock nodeOps for testing
-function createMocknodeOps<T extends ElementType>(): NodeOperations<T> & {
-  operations: string[];
-} {
-  const operations: string[] = [];
-
-  return {
-    operations,
-    moveElement(array, fromIndex, toIndex) {
-      const result = [...array];
-      const [element] = result.splice(fromIndex, 1);
-      result.splice(toIndex, 0, element);
-      operations.push(`move:${fromIndex}:${toIndex}`);
-      return result;
-    },
-    addElement(array, element, index) {
-      const result = [...array];
-      result.splice(index, 0, element);
-      operations.push(`add:${String(element)}:${index}`);
-      return result;
-    },
-    removeElement(array, index) {
-      const result = [...array];
-      result.splice(index, 1);
-      operations.push(`remove:${index}`);
-      return result;
-    },
-    findElementIndex(array, element) {
-      return array.findIndex((item) => item === element);
-    },
-  };
-}
-
-describe("doubleDiff", () => {
-  describe("with primitive types", () => {
-    it("should handle identical arrays", () => {
+describe("doubleDiff algorithm", () => {
+  describe("Basic cases", () => {
+    it("should handle identical arrays without changes", () => {
       const oldNodes = [1, 2, 3, 4];
       const newNodes = [1, 2, 3, 4];
-      const mockOps = createMocknodeOps<number>();
+      const mockOps = createMockNodeOps<number>();
 
       const states = doubleDiff(oldNodes, newNodes, mockOps);
 
@@ -49,284 +16,399 @@ describe("doubleDiff", () => {
       expect(mockOps.operations).toHaveLength(0);
     });
 
-    it("should handle additions at the beginning", () => {
-      const oldNodes = [2, 3, 4];
-      const newNodes = [1, 2, 3, 4];
-      const mockOps = createMocknodeOps<number>();
+    it("should handle empty arrays", () => {
+      const emptyArray: number[] = [];
 
-      const states = doubleDiff(oldNodes, newNodes, mockOps);
+      // Empty old array to non-empty new array
+      const mockOps1 = createMockNodeOps<number>();
+      const states1 = doubleDiff(emptyArray, [1, 2, 3], mockOps1);
+      expect(states1[states1.length - 1]).toEqual([1, 2, 3]);
+      expect(mockOps1.operations).toHaveLength(3);
+      expect(operationUtils.countByType(mockOps1.operations).adds).toBe(3);
 
-      expect(states.length).toBeGreaterThan(1);
-      expect(states[states.length - 1]).toEqual(newNodes);
-      expect(mockOps.operations).toContainEqual("add:1:0");
+      // Non-empty old array to empty new array
+      const mockOps2 = createMockNodeOps<number>();
+      const states2 = doubleDiff([1, 2, 3], emptyArray, mockOps2);
+      expect(states2[states2.length - 1]).toEqual([]);
+      expect(mockOps2.operations).toHaveLength(3);
+      expect(operationUtils.countByType(mockOps2.operations).removes).toBe(3);
+
+      // Both empty arrays
+      const mockOps3 = createMockNodeOps<number>();
+      const states3 = doubleDiff(emptyArray, emptyArray, mockOps3);
+      expect(states3).toHaveLength(1);
+      expect(states3[0]).toEqual([]);
+      expect(mockOps3.operations).toHaveLength(0);
+    });
+  });
+
+  describe("Five comparison scenarios", () => {
+    // Test for each of the five comparison scenarios in double-ended diff
+
+    describe("1. Head to Head comparison", () => {
+      it("should efficiently handle matching start elements", () => {
+        const oldNodes = [1, 2, 3, 4, 5];
+        const newNodes = [1, 6, 7, 8, 9];
+        const mockOps = createMockNodeOps<number>();
+
+        const states = doubleDiff(oldNodes, newNodes, mockOps);
+
+        expect(states[states.length - 1]).toEqual(newNodes);
+
+        // The first element should be preserved without moves
+        const moveOps = operationUtils.getByType(mockOps.operations, "move");
+        expect(moveOps.every((op) => op.element !== 1)).toBe(true);
+
+        // Should not perform unnecessary operations on common prefix
+        expect(mockOps.operations.length).toBeLessThan(
+          oldNodes.length + newNodes.length,
+        );
+      });
+
+      it("should preserve common prefix elements", () => {
+        const oldNodes = [1, 2, 3, 4, 5];
+        const newNodes = [1, 2, 6, 7, 8];
+        const mockOps = createMockNodeOps<number>();
+
+        const states = doubleDiff(oldNodes, newNodes, mockOps);
+
+        expect(states[states.length - 1]).toEqual(newNodes);
+
+        // Elements 1 and 2 should be preserved
+        const allOps = mockOps.operations;
+        expect(
+          allOps.every(
+            (op) =>
+              !(op.type === "move" && (op.element === 1 || op.element === 2)) &&
+              !(op.type === "remove" && (op.element === 1 || op.element === 2)),
+          ),
+        ).toBe(true);
+      });
     });
 
-    it("should handle additions at the end", () => {
-      const oldNodes = [1, 2, 3];
-      const newNodes = [1, 2, 3, 4];
-      const mockOps = createMocknodeOps<number>();
+    describe("2. Tail to Tail comparison", () => {
+      it("should efficiently handle matching end elements", () => {
+        const oldNodes = [1, 2, 3, 4, 5];
+        const newNodes = [6, 7, 8, 9, 5];
+        const mockOps = createMockNodeOps<number>();
 
-      const states = doubleDiff(oldNodes, newNodes, mockOps);
+        const states = doubleDiff(oldNodes, newNodes, mockOps);
 
-      expect(states.length).toBeGreaterThan(1);
-      expect(states[states.length - 1]).toEqual(newNodes);
-      expect(mockOps.operations).toContainEqual("add:4:3");
+        expect(states[states.length - 1]).toEqual(newNodes);
+
+        // The last element should be preserved without moves
+        const moveOps = operationUtils.getByType(mockOps.operations, "move");
+        expect(moveOps.every((op) => op.element !== 5)).toBe(true);
+      });
+
+      it("should preserve common suffix elements", () => {
+        const oldNodes = [1, 2, 3, 4, 5];
+        const newNodes = [6, 7, 8, 4, 5];
+        const mockOps = createMockNodeOps<number>();
+
+        const states = doubleDiff(oldNodes, newNodes, mockOps);
+
+        expect(states[states.length - 1]).toEqual(newNodes);
+
+        // Elements 4 and 5 should be preserved
+        const allOps = mockOps.operations;
+        expect(
+          allOps.every(
+            (op) =>
+              !(op.type === "move" && (op.element === 4 || op.element === 5)) &&
+              !(op.type === "remove" && (op.element === 4 || op.element === 5)),
+          ),
+        ).toBe(true);
+      });
     });
 
-    it("should handle additions in the middle", () => {
-      const oldNodes = [1, 2, 4];
-      const newNodes = [1, 2, 3, 4];
-      const mockOps = createMocknodeOps<number>();
+    describe("3. Head to Tail comparison", () => {
+      it("should handle when old start matches new end", () => {
+        const oldNodes = [1, 2, 3, 4, 5];
+        const newNodes = [2, 3, 4, 5, 1];
+        const mockOps = createMockNodeOps<number>();
 
-      const states = doubleDiff(oldNodes, newNodes, mockOps);
+        const states = doubleDiff(oldNodes, newNodes, mockOps);
 
-      expect(states.length).toBeGreaterThan(1);
-      expect(states[states.length - 1]).toEqual(newNodes);
-      expect(mockOps.operations).toContainEqual("add:3:2");
+        expect(states[states.length - 1]).toEqual(newNodes);
+
+        // Should include a move operation for element 1
+        const moveOps = operationUtils.getByType(mockOps.operations, "move");
+        expect(moveOps.some((op) => op.element === 1)).toBe(true);
+
+        // Check if element 1 was moved to the end
+        const elementMove = moveOps.find((op) => op.element === 1);
+        expect(elementMove?.toIndex).toBeGreaterThan(3); // Moved to later position
+      });
+
+      it("should optimize operations when moving head to tail", () => {
+        const oldNodes = [1, 2, 3, 4, 5];
+        const newNodes = [2, 3, 1, 4, 5];
+        const mockOps = createMockNodeOps<number>();
+
+        const states = doubleDiff(oldNodes, newNodes, mockOps);
+
+        expect(states[states.length - 1]).toEqual(newNodes);
+
+        // Should prefer moving over remove+add
+        expect(
+          operationUtils.countByType(mockOps.operations).moves,
+        ).toBeGreaterThan(0);
+        expect(operationUtils.countByType(mockOps.operations).adds).toBe(0);
+        expect(operationUtils.countByType(mockOps.operations).removes).toBe(0);
+      });
     });
 
-    it("should handle removals from the beginning", () => {
-      const oldNodes = [1, 2, 3, 4];
-      const newNodes = [2, 3, 4];
-      const mockOps = createMocknodeOps<number>();
+    describe("4. Tail to Head comparison", () => {
+      it("should handle when old end matches new start", () => {
+        const oldNodes = [1, 2, 3, 4, 5];
+        const newNodes = [5, 1, 2, 3, 4];
+        const mockOps = createMockNodeOps<number>();
 
-      const states = doubleDiff(oldNodes, newNodes, mockOps);
+        const states = doubleDiff(oldNodes, newNodes, mockOps);
 
-      expect(states.length).toBeGreaterThan(1);
-      expect(states[states.length - 1]).toEqual(newNodes);
-      expect(mockOps.operations).toContainEqual("remove:0");
+        expect(states[states.length - 1]).toEqual(newNodes);
+
+        // Should include a move operation for element 5
+        const moveOps = operationUtils.getByType(mockOps.operations, "move");
+        expect(moveOps.some((op) => op.element === 5)).toBe(true);
+
+        // Check if element 5 was moved to the beginning
+        const elementMove = moveOps.find((op) => op.element === 5);
+        expect(elementMove?.toIndex).toBeLessThan(2); // Moved to earlier position
+      });
+
+      it("should optimize operations when moving tail to head", () => {
+        const oldNodes = [1, 2, 3, 4, 5];
+        const newNodes = [5, 1, 2, 3, 4];
+        const mockOps = createMockNodeOps<number>();
+
+        const states = doubleDiff(oldNodes, newNodes, mockOps);
+
+        expect(states[states.length - 1]).toEqual(newNodes);
+
+        // Should prefer moving over remove+add
+        expect(
+          operationUtils.countByType(mockOps.operations).moves,
+        ).toBeGreaterThan(0);
+        expect(operationUtils.countByType(mockOps.operations).adds).toBe(0);
+        expect(operationUtils.countByType(mockOps.operations).removes).toBe(0);
+      });
     });
 
-    it("should handle removals from the end", () => {
-      const oldNodes = [1, 2, 3, 4];
-      const newNodes = [1, 2, 3];
-      const mockOps = createMocknodeOps<number>();
+    describe("5. Search and compare (non-matching cases)", () => {
+      it("should handle finding and moving non-sequential elements", () => {
+        const oldNodes = [1, 2, 3, 4, 5];
+        const newNodes = [1, 5, 2, 3, 4];
+        const mockOps = createMockNodeOps<number>();
 
-      const states = doubleDiff(oldNodes, newNodes, mockOps);
+        const states = doubleDiff(oldNodes, newNodes, mockOps);
 
-      expect(states.length).toBeGreaterThan(1);
-      expect(states[states.length - 1]).toEqual(newNodes);
-      expect(mockOps.operations).toContainEqual("remove:3");
+        expect(states[states.length - 1]).toEqual(newNodes);
+
+        // Should include a move operation for element 5
+        const moveOps = operationUtils.getByType(mockOps.operations, "move");
+        expect(moveOps.some((op) => op.element === 5)).toBe(true);
+      });
+
+      it("should handle adding new elements when no match is found", () => {
+        const oldNodes = [1, 2, 3, 4];
+        const newNodes = [1, 5, 2, 3, 4];
+        const mockOps = createMockNodeOps<number>();
+
+        const states = doubleDiff(oldNodes, newNodes, mockOps);
+
+        expect(states[states.length - 1]).toEqual(newNodes);
+
+        // Should include an add operation for element 5
+        const addOps = operationUtils.getByType(mockOps.operations, "add");
+        expect(addOps.some((op) => op.element === 5)).toBe(true);
+      });
     });
+  });
 
-    it("should handle removals from the middle", () => {
-      const oldNodes = [1, 2, 3, 4];
-      const newNodes = [1, 2, 4];
-      const mockOps = createMocknodeOps<number>();
-
-      const states = doubleDiff(oldNodes, newNodes, mockOps);
-
-      expect(states.length).toBeGreaterThan(1);
-      expect(states[states.length - 1]).toEqual(newNodes);
-      expect(mockOps.operations).toContainEqual("remove:2");
-    });
-
-    it("should handle simple moves", () => {
-      const oldNodes = [1, 2, 3, 4];
-      const newNodes = [1, 3, 2, 4];
-      const mockOps = createMocknodeOps<number>();
-
-      const states = doubleDiff(oldNodes, newNodes, mockOps);
-
-      expect(states.length).toBeGreaterThan(1);
-      expect(states[states.length - 1]).toEqual(newNodes);
-      // Expect a move operation happened
-      expect(mockOps.operations.some((op) => op.startsWith("move:"))).toBe(
-        true,
-      );
-    });
-
-    it("should handle with abnormal situation properly", () => {
-      const oldNodes = [1, 2, 3, 4];
-      const newNodes = [2, 4, 1, 3];
-      const mockOps = createMocknodeOps<number>();
-
-      const states = doubleDiff(oldNodes, newNodes, mockOps);
-
-      expect(states.length).toBeGreaterThan(1);
-      expect(states[states.length - 1]).toEqual(newNodes);
-    });
-
-    it("should handle prefix and suffix nodes correctly", () => {
-      const oldNodes = [1, 2, 3, 4, 5, 6];
-      const newNodes = [1, 2, 4, 3, 5, 6];
-      const mockOps = createMocknodeOps<number>();
-
-      const states = doubleDiff(oldNodes, newNodes, mockOps);
-
-      expect(states.length).toBeGreaterThan(1);
-      expect(states[states.length - 1]).toEqual(newNodes);
-      // one move operation should happen, not modifying the common prefix/suffix
-      expect(mockOps.operations.length).toBe(1);
-    });
-
+  describe("Complex transformations", () => {
     it("should efficiently handle reversed arrays", () => {
       const oldNodes = [1, 2, 3, 4, 5];
       const newNodes = [5, 4, 3, 2, 1];
-      const mockOps = createMocknodeOps<number>();
+      const mockOps = createMockNodeOps<number>();
 
       const states = doubleDiff(oldNodes, newNodes, mockOps);
 
-      expect(states.length).toBeGreaterThan(1);
       expect(states[states.length - 1]).toEqual(newNodes);
-      // Check that move operations were performed
+
+      // Compare with naive solution (remove all + add all would be 10 operations)
+      expect(mockOps.operations.length).toBeLessThan(10);
+
+      // Should prefer moves over removes+adds
       expect(
-        mockOps.operations.filter((op) => op.startsWith("move:")).length,
+        operationUtils.countByType(mockOps.operations).moves,
       ).toBeGreaterThan(0);
     });
 
-    it("should handle complex transformations", () => {
+    it("should handle mixed operations (adds, removes, and moves)", () => {
       const oldNodes = [1, 2, 3, 4, 5];
-      const newNodes = [6, 2, 7, 5, 3];
-      const mockOps = createMocknodeOps<number>();
+      const newNodes = [5, 6, 3, 7, 1];
+      const mockOps = createMockNodeOps<number>();
 
       const states = doubleDiff(oldNodes, newNodes, mockOps);
 
-      expect(states.length).toBeGreaterThan(1);
       expect(states[states.length - 1]).toEqual(newNodes);
 
-      // Check for expected operations (additions, removals, moves)
-      const operations = mockOps.operations;
-      expect(
-        operations.filter((op) => op.startsWith("add:")).length,
-      ).toBeGreaterThan(0);
-      expect(
-        operations.filter((op) => op.startsWith("remove:")).length,
-      ).toBeGreaterThan(0);
-    });
+      const counts = operationUtils.countByType(mockOps.operations);
 
-    it("should optimize operations by reusing common prefix/suffix", () => {
-      const oldNodes = [1, 2, 3, 4, 5, 6, 7, 8];
-      const newNodes = [1, 2, 8, 3, 4, 6, 7];
-      const mockOps = createMocknodeOps<number>();
-
-      const states = doubleDiff(oldNodes, newNodes, mockOps);
-
-      expect(states.length).toBeGreaterThan(1);
-      expect(states[states.length - 1]).toEqual(newNodes);
-    });
-  });
-
-  describe("with string types", () => {
-    it("should handle string arrays", () => {
-      const oldNodes = ["a", "b", "c"];
-      const newNodes = ["d", "a", "c", "e"];
-      const mockOps = createMocknodeOps<string>();
-
-      const states = doubleDiff(oldNodes, newNodes, mockOps);
-
-      expect(states.length).toBeGreaterThan(1);
-      expect(states[states.length - 1]).toEqual(newNodes);
-      expect(
-        mockOps.operations.filter((op) => op.startsWith("add:")).length,
-      ).toBeGreaterThan(0);
-      expect(
-        mockOps.operations.filter((op) => op.startsWith("remove:")).length,
-      ).toBeGreaterThan(0);
-    });
-  });
-
-  describe("edge cases", () => {
-    it("should handle empty old array", () => {
-      const oldNodes: number[] = [];
-      const newNodes = [1, 2, 3];
-      const mockOps = createMocknodeOps<number>();
-
-      const states = doubleDiff(oldNodes, newNodes, mockOps);
-
-      expect(states.length).toBeGreaterThan(1);
-      expect(states[states.length - 1]).toEqual(newNodes);
-      expect(mockOps.operations.length).toBe(3); // Three add operations
-    });
-
-    it("should handle empty new array", () => {
-      const oldNodes = [1, 2, 3];
-      const newNodes: number[] = [];
-      const mockOps = createMocknodeOps<number>();
-
-      const states = doubleDiff(oldNodes, newNodes, mockOps);
-
-      expect(states.length).toBeGreaterThan(1);
-      expect(states[states.length - 1]).toEqual(newNodes);
-      expect(mockOps.operations.length).toBe(3); // Three remove operations
-    });
-
-    it("should handle completely different arrays", () => {
-      const oldNodes = [1, 2, 3];
-      const newNodes = [4, 5, 6];
-      const mockOps = createMocknodeOps<number>();
-
-      const states = doubleDiff(oldNodes, newNodes, mockOps);
-
-      expect(states.length).toBeGreaterThan(1);
-      expect(states[states.length - 1]).toEqual(newNodes);
-      expect(
-        mockOps.operations.filter((op) => op.startsWith("add:")).length,
-      ).toBe(3);
-      expect(
-        mockOps.operations.filter((op) => op.startsWith("remove:")).length,
-      ).toBe(3);
-    });
-
-    it("should perform efficiently when one array is a subset of the other", () => {
-      const oldNodes = [1, 2, 3, 4, 5];
-      const newNodes = [2, 3, 4];
-      const mockOps = createMocknodeOps<number>();
-
-      const states = doubleDiff(oldNodes, newNodes, mockOps);
-
-      expect(states.length).toBeGreaterThan(1);
-      expect(states[states.length - 1]).toEqual(newNodes);
-      expect(mockOps.operations.length).toBe(5);
+      // Should include all three operation types
+      expect(counts.moves).toBeGreaterThan(0);
+      expect(counts.adds).toBeGreaterThan(0);
+      expect(counts.removes).toBeGreaterThan(0);
     });
 
     it("should handle arrays with repeated elements", () => {
       const oldNodes = [1, 2, 2, 3, 4];
       const newNodes = [1, 2, 3, 2, 4];
-      const mockOps = createMocknodeOps<number>();
+      const mockOps = createMockNodeOps<number>();
 
       const states = doubleDiff(oldNodes, newNodes, mockOps);
 
-      expect(states.length).toBeGreaterThan(1);
       expect(states[states.length - 1]).toEqual(newNodes);
-      // Test that the repeated element is handled correctly
-      expect(mockOps.operations.some((op) => op.startsWith("move:"))).toBe(
-        true,
-      );
+
+      // Check that repeated elements are handled correctly
+      expect(mockOps.operations.some((op) => op.type === "move")).toBe(true);
+    });
+
+    it("should correctly handle complex reorderings with minimal operations", () => {
+      const oldNodes = [1, 2, 3, 4, 5, 6, 7, 8];
+      const newNodes = [8, 3, 4, 2, 7, 1, 6, 5];
+      const mockOps = createMockNodeOps<number>();
+
+      const states = doubleDiff(oldNodes, newNodes, mockOps);
+
+      expect(states[states.length - 1]).toEqual(newNodes);
+
+      // Should use fewer operations than naive approach (16 operations for remove all + add all)
+      expect(mockOps.operations.length).toBeLessThan(16);
     });
   });
 
-  describe("performance optimizations", () => {
-    it("should minimize the number of operations", () => {
-      const oldNodes = [1, 2, 3, 4, 5, 6, 7, 8];
-      const newNodes = [8, 7, 6, 5, 4, 3, 2, 1];
-      const mockOps = createMocknodeOps<number>();
+  describe("Edge cases", () => {
+    it("should handle completely different arrays", () => {
+      const oldNodes = [1, 2, 3];
+      const newNodes = [4, 5, 6];
+      const mockOps = createMockNodeOps<number>();
 
       const states = doubleDiff(oldNodes, newNodes, mockOps);
 
       expect(states[states.length - 1]).toEqual(newNodes);
 
-      // A naive algorithm might perform 16+ operations (remove all + add all)
-      // An optimal solution would use fewer operations
-      expect(mockOps.operations.length).toBeLessThan(16);
+      const counts = operationUtils.countByType(mockOps.operations);
+      expect(counts.adds).toBe(3);
+      expect(counts.removes).toBe(3);
+    });
+
+    it("should handle when one array is a subset of the other", () => {
+      // Old array is a subset of new array
+      const mockOps1 = createMockNodeOps<number>();
+      const states1 = doubleDiff([1, 2, 3], [1, 2, 3, 4, 5], mockOps1);
+      expect(states1[states1.length - 1]).toEqual([1, 2, 3, 4, 5]);
+      expect(operationUtils.countByType(mockOps1.operations).adds).toBe(2);
+      expect(operationUtils.countByType(mockOps1.operations).removes).toBe(0);
+
+      // New array is a subset of old array
+      const mockOps2 = createMockNodeOps<number>();
+      const states2 = doubleDiff([1, 2, 3, 4, 5], [1, 2, 3], mockOps2);
+      expect(states2[states2.length - 1]).toEqual([1, 2, 3]);
+      expect(operationUtils.countByType(mockOps2.operations).adds).toBe(0);
+      expect(operationUtils.countByType(mockOps2.operations).removes).toBe(2);
+    });
+
+    it("should handle arrays with null elements", () => {
+      const oldNodes = [1, null as unknown as number, 3, 4];
+      const newNodes = [1, 2, 3, null as unknown as number];
+      const mockOps = createMockNodeOps<number>();
+
+      const states = doubleDiff(oldNodes, newNodes, mockOps);
+
+      expect(states[states.length - 1]).toEqual(newNodes);
+    });
+
+    it("should handle edge case with repeated elements in complex arrangement", () => {
+      const oldNodes = [1, 2, 3, 2, 4, 5];
+      const newNodes = [2, 6, 4, 2, 3, 1];
+      const mockOps = createMockNodeOps<number>();
+
+      const states = doubleDiff(oldNodes, newNodes, mockOps);
+
+      expect(states[states.length - 1]).toEqual(newNodes);
+    });
+  });
+
+  describe("Performance optimization", () => {
+    it("should minimize the number of operations", () => {
+      const oldNodes = Array.from({ length: 10 }, (_, i) => i + 1);
+      const newNodes = Array.from({ length: 10 }, (_, i) => 10 - i);
+      const mockOps = createMockNodeOps<number>();
+
+      const states = doubleDiff(oldNodes, newNodes, mockOps);
+
+      expect(states[states.length - 1]).toEqual(newNodes);
+
+      // A naive algorithm might perform 20 operations (remove all + add all)
+      // Double-ended diff should perform significantly fewer
+      expect(mockOps.operations.length).toBeLessThan(20);
     });
 
     it("should prefer moving elements over remove+add when possible", () => {
-      const oldNodes = [1, 2, 3, 4];
-      const newNodes = [4, 3, 2, 1];
-      const mockOps = createMocknodeOps<number>();
+      const oldNodes = [1, 2, 3, 4, 5];
+      const newNodes = [3, 4, 5, 1, 2];
+      const mockOps = createMockNodeOps<number>();
 
       const states = doubleDiff(oldNodes, newNodes, mockOps);
 
       expect(states[states.length - 1]).toEqual(newNodes);
 
-      // Should prefer moves over removes+adds
-      expect(
-        mockOps.operations.filter((op) => op.startsWith("move:")).length,
-      ).toBeGreaterThan(0);
+      // Should perform more moves than adds/removes
+      const counts = operationUtils.countByType(mockOps.operations);
+      expect(counts.moves).toBeGreaterThan(counts.adds + counts.removes);
+    });
+  });
 
-      // Should have fewer operations than naive remove+add (which would be 8 operations)
-      expect(mockOps.operations.length).toBeLessThan(8);
+  describe("String elements", () => {
+    it("should handle string arrays correctly", () => {
+      const oldNodes = ["a", "b", "c", "d"];
+      const newNodes = ["d", "c", "b", "a"];
+      const mockOps = createMockNodeOps<string>();
+
+      const states = doubleDiff(oldNodes, newNodes, mockOps);
+
+      expect(states[states.length - 1]).toEqual(newNodes);
+
+      // Check operations were performed correctly
+      const counts = operationUtils.countByType(mockOps.operations);
+      expect(counts.moves).toBeGreaterThan(0);
+    });
+
+    it("should handle mixed string operations", () => {
+      const oldNodes = ["apple", "banana", "cherry", "date"];
+      const newNodes = ["banana", "elderberry", "date", "apple", "fig"];
+      const mockOps = createMockNodeOps<string>();
+
+      const states = doubleDiff(oldNodes, newNodes, mockOps);
+
+      expect(states[states.length - 1]).toEqual(newNodes);
+
+      // Check correct operations were performed
+      const counts = operationUtils.countByType(mockOps.operations);
+      expect(counts.moves).toBeGreaterThan(0);
+      expect(counts.adds).toBeGreaterThan(0);
+      expect(counts.removes).toBeGreaterThan(0);
+
+      // Verify specific operations
+      const addOps = operationUtils.getByType(mockOps.operations, "add");
+      expect(addOps.some((op) => op.element === "elderberry")).toBe(true);
+      expect(addOps.some((op) => op.element === "fig")).toBe(true);
+
+      const removeOps = operationUtils.getByType(mockOps.operations, "remove");
+      expect(removeOps.some((op) => op.element === "cherry")).toBe(true);
     });
   });
 });
