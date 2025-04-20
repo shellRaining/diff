@@ -1,68 +1,107 @@
-import { type NodeOperations, type ElementType, nodeOps } from "./nodeOps";
+import { Node, Yallist } from "yallist";
+import { insert, move, remove } from "./linkedListOps";
 
-function simpleDiff<T extends ElementType>(
-  oldNodes: T[],
-  newNodes: T[],
-  ops: NodeOperations<T> = nodeOps as NodeOperations<T>,
-): T[][] {
-  const { moveElement, addElement, removeElement, findElementIndex } = ops;
-  const states: T[][] = [oldNodes.slice()];
-
-  // Process additions and moves
-  let lastFoundIndex = 0;
-
-  for (const [index, currentNode] of newNodes.entries()) {
-    const currentState = states[states.length - 1];
-    let nextState = currentState.slice();
-    const oldNodeIndex = findElementIndex(oldNodes, currentNode);
-
-    // Handle existing nodes
-    if (oldNodeIndex !== -1) {
-      if (oldNodeIndex >= lastFoundIndex) {
-        // Node is already in correct position or later
-        lastFoundIndex = oldNodeIndex;
-      } else if (index > 0) {
-        // Node needs to be moved after previous node
-        const prevNode = newNodes[index - 1];
-        const prevNodePosition = findElementIndex(currentState, prevNode);
-        const currentNodePosition = findElementIndex(currentState, currentNode);
-
-        nextState = moveElement(
-          currentState,
-          currentNodePosition,
-          prevNodePosition,
-        );
-        states.push(nextState);
-      }
-    }
-    // Handle new nodes
-    else {
-      if (index > 0) {
-        // Add after previous node
-        const prevNode = newNodes[index - 1];
-        const prevNodePosition = findElementIndex(currentState, prevNode);
-
-        nextState = addElement(currentState, currentNode, prevNodePosition + 1);
-      } else {
-        // Add to beginning
-        nextState = addElement(currentState, currentNode, 0);
-      }
-      states.push(nextState);
-    }
-  }
-
-  // Process removals
-  for (const oldNode of oldNodes) {
-    if (findElementIndex(newNodes, oldNode) === -1) {
-      const currentState = states[states.length - 1];
-      const oldNodePosition = findElementIndex(currentState, oldNode);
-      const nextState = removeElement(currentState, oldNodePosition);
-
-      states.push(nextState);
-    }
-  }
-
-  return states;
+type KeyType = string;
+interface VNode<T> {
+  key: KeyType;
+  el: Node<T>;
 }
 
-export { simpleDiff };
+type InsertOperation<T> = { type: "insert"; value: T; anchor?: T };
+type RemoveOperation<T> = { type: "remove"; value: T };
+type MoveOperation<T> = { type: "move"; value: T; anchor?: T };
+type Operation<T> = InsertOperation<T> | RemoveOperation<T> | MoveOperation<T>;
+
+export function createTestCase<T>(oldState: T[], newState: T[]) {
+  const list = new Yallist(oldState);
+  const map = new Map<KeyType, Node<T>>();
+  let p = list.head;
+  let cnt = 0;
+
+  const oldVNodes: VNode<T>[] = new Array(oldState.length);
+  const newVNodes: VNode<T>[] = new Array(newState.length);
+
+  while (p) {
+    const key = String(oldState[cnt]);
+    map.set(key, p);
+    oldVNodes[cnt] = { key, el: p };
+    p = p.next;
+    cnt++;
+  }
+
+  for (let i = 0; i < newState.length; i++) {
+    const key = String(newState[i]);
+    let el = map.get(key) ?? new Node<T>(newState[i]);
+    newVNodes[i] = { key, el };
+  }
+
+  return { oldVNodes, newVNodes };
+}
+
+export function diff<T>(
+  oldVNodes: VNode<T>[],
+  newVNodes: VNode<T>[],
+): { states: T[][]; operations: Operation<T>[] } {
+  const initState = oldVNodes.map((v) => v.el.value);
+  const states: T[][] = [initState];
+  const operations: Operation<T>[] = [];
+  const oldList = oldVNodes[0]?.el.list ?? new Yallist();
+
+  let latestIdx = 0;
+  for (let i = 0; i < newVNodes.length; i++) {
+    const newVNode = newVNodes[i];
+    let found = false;
+    for (let j = 0; j < oldVNodes.length; j++) {
+      const oldVNode = oldVNodes[j];
+      if (oldVNode.key === newVNode.key) {
+        found = true;
+        if (j >= latestIdx) {
+          latestIdx = j;
+        } else {
+          const prevVNode = newVNodes[i - 1];
+          if (prevVNode) {
+            const anchor = prevVNode.el.next;
+            const oldEl = oldVNode.el;
+            move(oldEl, oldList, anchor);
+            states.push(oldList.toArray());
+            operations.push({
+              type: "move",
+              value: oldEl.value,
+              anchor: anchor?.value,
+            });
+          } else {
+          }
+        }
+      }
+    }
+
+    if (!found) {
+      const prevVNode = newVNodes[i - 1];
+      let anchor = null;
+      if (prevVNode) {
+        anchor = prevVNode.el.next;
+      } else {
+        anchor = oldList.head;
+      }
+      insert(newVNode.el, oldList, anchor);
+      states.push(oldList.toArray());
+      operations.push({
+        type: "insert",
+        value: newVNode.el.value,
+        anchor: anchor?.value,
+      });
+    }
+  }
+
+  for (let i = 0; i < oldVNodes.length; i++) {
+    const oldVNode = oldVNodes[i];
+    const has = newVNodes.find((item) => item.key === oldVNode.key);
+    if (!has) {
+      remove(oldVNode.el, oldList);
+      states.push(oldList.toArray());
+      operations.push({ type: "remove", value: oldVNode.el.value });
+    }
+  }
+
+  return { states, operations };
+}
